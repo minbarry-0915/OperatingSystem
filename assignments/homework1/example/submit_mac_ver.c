@@ -11,7 +11,6 @@
 #define MAX_TEST_CASES 20
 #define TIME_LIMIT 1
 
-
 int correct_num = 0;
 int timeout_num = 0;
 int wrong_num = 0;
@@ -36,7 +35,6 @@ void parse_arguments(int argc, char *argv[], char **inputdir, char **outputdir, 
                 exit(1);
         }
     }
-
     if (optind < argc) {
         *targetsrc = argv[optind];
     } else {
@@ -50,8 +48,10 @@ void compile_source(char *targetsrc) {
 
     if (pid == 0) {
         // 자식 프로세스에서 컴파일을 실행
-        char *gcc_args[] = {"gcc", "-fsanitize=address", targetsrc,  "-o", "compiled_program", NULL};
+        char *gcc_args[] = {"gcc", "-fsanitize=address", targetsrc, "-o", "compiled_program", NULL};
         execvp("gcc", gcc_args);
+        // 성공하면 이후의 코드는 실행되지 않음
+
         // execvp가 실패했을 경우
         perror("fail: execvp");
         exit(1);
@@ -76,7 +76,7 @@ void compile_source(char *targetsrc) {
 }
 
 void alarm_handler(int sig) {
-    kill(getpid(),SIGKILL); //자식 프로세스 죽여라
+    kill(getpid(), SIGKILL); //자식 프로세스 죽여라
 }
 
 
@@ -91,171 +91,159 @@ void run_test_cases(char *inputdir, char *answerdir, int timelimit, char *compil
         exit(1);
     }
 
-
     signal(SIGALRM, alarm_handler);
+    // 시그널 핸들러 등록
 
     char input_path[1024];
-    //char output_path[1024];
     char answer_path[1024];
 
     sprintf(input_path, "%s/%d.txt", inputdir, index); // input/1.txt
-    //sprintf(output_path, "output/%d.txt", index); // output/1.txt
-    sprintf(answer_path, "%s/%d.txt",answerdir, index); // answer/1.txt
+    sprintf(answer_path, "%s/%d.txt", answerdir, index); // answer/1.txt
 
     //input 읽기 전용으로
-    int input_fd = open(input_path, O_RDONLY);  
+    int input_fd = open(input_path, O_RDONLY);
     if (input_fd < 0) {
         printf("No more test cases. Exiting...\n");
         return; // 함수 종료
     }
 
-    //output 쓰기 전용,파일이 없으면 생성가능,이미 있으면 덮어쓰기
-    // int output_fd = open(output_path, O_WRONLY | O_CREAT | O_TRUNC, 0666); 
-    // if (output_fd < 0) {
-    //     perror("Runtime - cannot open output file");
-    //     exit(1);
-    // }
-
     // answer 읽기 전용으로
-    int answer_fd = open(answer_path, O_RDONLY);  
+    int answer_fd = open(answer_path, O_RDONLY);
     if (answer_fd < 0) {
         perror("Runtime - cannot open answer file");
         exit(1);
     }
 
+    // 자식 프로세스 생성
     pid_t pid = fork();
-    if (pid == 0) {
-        // 자식 프로세스에서 프로그램 실행
+
+
+    if (pid == 0) { //자식 프로세스
         alarm(timelimit); // 타이머 설정 define timelimit 1
-        //struct itimerval timer; 
-        // //받은 밀리세컨드 단위의 timelimit 변환
-        // timer.it_value.tv_sec = timelimit / 1000; 
-        // timer.it_value.tv_usec = (timelimit % 1000) / 1000;
-        // timer.it_interval.tv_sec = 0; // 반복 없음
-        // timer.it_interval.tv_usec = 0; // 마이크로초는 0
+        close(pipefd[0]); //pipe읽기 닫기: 쓰기만
 
-        // // 타이머 설정
-        // if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
-        //     perror("setitimer");
-        //     exit(1);
-        // }
-        close(pipefd[0]); //pipe읽기 닫기:쓰기만
-
-        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {  //stdout을 파이프로 리다이렉트: 이제 출력된게 파이프로 감
+        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+            // 표준 출력(STDOUT)을 파이프로 리다이렉트
             perror("dup2");
             exit(1);
         }
         close(pipefd[1]); // STDOUT으로 리다이렉트 했으므로 파이프의 쓰기 닫기
 
 
-        //printf("\ntesting %d.txt ....\n", index);
-        dup2(input_fd, STDIN_FILENO);  
-        //dup2(output_fd, STDOUT_FILENO);
+        dup2(input_fd, STDIN_FILENO);
+        // 표준 입력(STDIN)을 파일로 리다이렉트
+
+        // 즉 이 시점에서 파이프[1]은 자식 프로세스의 출력으로
+        // input_fd는 자식 프로세스의 입력으로 사용됨
+
         close(input_fd);
-        //close(output_fd);
-    
+
         char *program_args[] = {compiled_program, NULL};
+        // 여기서 NULL 이 들어간 이유는 execvp 함수가 인자를 받을 때 NULL로 끝나는 배열을 받기 때문
         execvp(compiled_program, program_args);
-                 
+        // 이걸 성공적으로 돌리게 되면 출력이 pipe를 통해 부모 프로세스로 전달됨
+
+
         // execvp가 실패했을 경우
         perror("fail: execvp");
 
         exit(1);
-    } else if (pid > 0) {
-        // 부모 프로세스
-        close(pipefd[1]); // 부모 프로세스에서는 파이프의 쓰기 닫기
-        
+    } else if (pid > 0) { // 부모 프로세스
+        close(pipefd[1]);
+        // 부모 프로세스에서는 파이프의 쓰기 닫기
+        // 부모 프로세스는 자식 프로세스의 출력을 읽기만 함
+
         int status;
-        
+
         struct timeval start_time, end_time;
         long long elapsed_time;
 
-         // 프로그램 시작 시간 기록
+        // 프로그램 시작 시간 기록
         gettimeofday(&start_time, NULL);
-        //printf("시작시간 : %ld\n",start_time.tv_usec);
 
         wait(&status); // 자식 프로세스가 종료될 때까지 대기
- 
+        printf("%d", WTERMSIG(status));
         // 프로그램 종료 시간 기록
         gettimeofday(&end_time, NULL);
-        //printf("종료시간: %ld\n",end_time.tv_usec);
 
         // 시간 차이 계산
         elapsed_time = (end_time.tv_sec - start_time.tv_sec) * 1000000LL + (end_time.tv_usec - start_time.tv_usec);
 
-        printf("test case %d: ", index);
-        
-        if (WIFSIGNALED(status)) {  //자식프로세스가 시그널에 의해서 종료되었을때 ex 무한루프
+
+        // 결과 출력
+        printf("\ntest case %d: ", index);
+
+        if (WIFSIGNALED(status)) { // 신호에 의해서 종료되었는지를 판단, 시그널에 의해 종료되었을 때 참
+            printf("%d", WTERMSIG(status));
             if (WTERMSIG(status) == SIGALRM) {
                 // 시그널이 SIGALRM이면 timeout
                 printf("Timeout Error\n");
                 timeout_num++;
-                } 
-        }    
-        else{
-            if (WIFEXITED(status)) {  //자식프로세스가 정상 종료 되었고 
+            } else{
+                // 윈도우에서는 안돌아감
+                // 시그널에 의해 종료되었지만 SIGALRM이 아닐 때, 시그널 번호 출력
+                printf("Runtime Error - signal %d\n", WTERMSIG(status));
+                runtime_error_num++;
+            }
+        } else {
+            if (WIFEXITED(status)) {  // 자식 프로세스가 정상 종료 되었을때
                 int exit_status = WEXITSTATUS(status);
-                if (exit_status == 0) { //exit code가 0일때 
-                    //정답과 비교                
+                if (exit_status == 0) { // 만약 정상종료 되었다면
+                    // 정답과 비교
                     // 파이프로부터 자식 프로세스의 출력을 읽음
                     char output_buffer[4096];
                     ssize_t output_size = read(pipefd[0], output_buffer, sizeof(output_buffer));
-                    
-                    //못읽어와서 -1 반환받으면
+                    // 파이프로부터 읽은 내용을 output_buffer에 저장
+                    // output_size에는 읽은 바이트 수가 저장됨
+
+                    // 못읽어와서 -1 반환받으면
                     if (output_size < 0) {
-                           perror("runtime error - cannot read pipe"); //에러
-                        exit(1); //종료
+                        perror("runtime error - cannot read pipe"); // 에러
+                        exit(1); // 종료
                     }
                     close(pipefd[0]); // 파이프 읽기 종료
-                    
+
                     char answer_buffer[4096];
                     int answer_fd = open(answer_path, O_RDONLY);
                     if (answer_fd < 0) {
                         perror("runtime error - cannot open answer file");
                         exit(1);
-                    }          
-                    //printf("Buffer contents: %s\n", output_buffer);
-                    //ssize_t output_size = read(output_fd, output_buffer, sizeof(output_buffer));
+                    }
                     ssize_t answer_size = read(answer_fd, answer_buffer, sizeof(answer_buffer));
+                    // 정답 파일을 읽어와서 answer_buffer에 저장
+                    // answer_size에는 읽은 바이트 수가 저장됨
 
-                    //printf("%ld %ld\n", output_size, answer_size);
 
                     if (output_size != answer_size || memcmp(output_buffer, answer_buffer, output_size) != 0) {
+                        // input과 output buffer 크기가 다르거나, 두 버퍼에 있는 값이 다르면
+
+                        // 틀린 답이라 출력
                         printf("Fail - wrong answer\n");
-                        //카운트 해야됨
-                        wrong_num ++;
+                        wrong_num++;
                     } else {
+                        // 그게 아니라면 정답이라 출력
                         printf("Success - correct answer\n");
-                        //카운트 해야됨
-                        correct_num ++;
+                        correct_num++;
                         // 실행 시간 출력 (밀리초 단위)
                         printf("correct process runtime : %lld ms\n", elapsed_time / 1000);
                         printf("\n");
                         total_runtime += elapsed_time;
                     }
-                } else { //자식프로세스가 정상 종료되었지만 exit code가 0이 아닐때 ex) segmentation fault, buffer overflow.
-                    //원래는 시그널에 의해 종료되고 exitcode가 0이 아니여야하지만, 이 운영체제에서는 정상종료되고 exitcode를 반환하지 않고 있다..ㅠㅠ
-                    printf("runtime error - exit code is not null %d\n", WTERMSIG(status));
-                    runtime_error_num++;
                 }
             }
         }
-
         alarm(0); // 다음 테스트 케이스를 위해 알람 초기화
         close(input_fd);
-        //close(output_fd);
         close(answer_fd);
 
         // 다음 테스트 케이스 실행
         run_test_cases(inputdir, answerdir, timelimit, compiled_program, index + 1);
-    }
-    else {
+    } else {
         // fork 실패
         perror("fail: fork");
         exit(1);
     }
 }
-
 
 int main(int argc, char *argv[]) {
     char *inputdir = NULL; //입력 디렉토리
@@ -272,7 +260,6 @@ int main(int argc, char *argv[]) {
 
     compile_source(targetsrc);
 
-    // 여기에서 추가적인 채점 로직을 구현
     run_test_cases(inputdir, answerdir, timelimit, "./compiled_program", 1);
 
     // 결과 출력
@@ -280,12 +267,13 @@ int main(int argc, char *argv[]) {
 
     printf("Correct test case: %d cases\n", correct_num);
     printf("Wrong test case: %d cases\n", wrong_num);
-    printf("Timeout test case: %d cases\n\n", timeout_num);
+    printf("Timeout test case: %d cases\n", timeout_num);
+    printf("Runtime error test case: %d cases\n\n", runtime_error_num);
 
-    int total_num = wrong_num + correct_num + timeout_num + runtime_error_num;
-    printf("correct/total : %d / %d \n\n", correct_num, total_num);
+    printf("correct/total : %d / %d \n\n", correct_num, wrong_num + correct_num + timeout_num + runtime_error_num);
 
-    printf("Total correct case runtime: %lld ms\n", total_runtime/1000);
+    printf("Total correct case runtime: %lld ms\n", total_runtime / 1000);
     printf("(When you run %d correct test cases)\n", correct_num);
     return 0;
+
 }
