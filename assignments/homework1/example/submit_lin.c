@@ -7,7 +7,6 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <signal.h>
-#include <dirent.h>
 
 #define MAX_TEST_CASES 20
 #define TIME_LIMIT 1
@@ -51,10 +50,10 @@ void compile_source(char *targetsrc) {
 
     if (pid == 0) {
         // 자식 프로세스에서 컴파일을 실행
-        char *gcc_args[] = {"gcc", "-fsanitize=address", "-o", "compiled_program", targetsrc , NULL};
+        char *gcc_args[] = {"gcc", "-fsanitize=address", targetsrc,  "-o", "compiled_program", NULL};
         execvp("gcc", gcc_args);
         // execvp가 실패했을 경우
-        perror("fail: execvp\n");
+        perror("fail: execvp");
         exit(1);
     } else if (pid > 0) {
         // 부모 프로세스
@@ -63,7 +62,7 @@ void compile_source(char *targetsrc) {
         if (WIFEXITED(status)) {
             int exit_status = WEXITSTATUS(status);  //0이면 정상종료, 아니면 에러
             if (exit_status == 0) {
-                printf("compile success\n\n");
+                printf("compile success\n");
             } else {
                 fprintf(stderr, "compile error\n");
                 exit(1);
@@ -71,7 +70,7 @@ void compile_source(char *targetsrc) {
         }
     } else {
         // fork 실패
-        perror("fail: fork\n");
+        perror("fail: fork");
         exit(1);
     }
 }
@@ -80,30 +79,47 @@ void alarm_handler(int sig) {
     kill(getpid(),SIGKILL); //자식 프로세스 죽여라
 }
 
-void run_test_cases(char* input_path, char* answer_path, int timelimit, char *compiled_program) {
+
+void run_test_cases(char *inputdir, char *answerdir, int timelimit, char *compiled_program, int index) {
+    if (index > MAX_TEST_CASES) {
+        return;  // 모든 테스트 케이스를 완료했으므로 종료
+    }
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
-        perror("pipe\n");
+        perror("pipe");
         exit(1);
     }
 
 
     signal(SIGALRM, alarm_handler);
 
+    char input_path[1024];
+    //char output_path[1024];
+    char answer_path[1024];
+
+    sprintf(input_path, "%s/%d.txt", inputdir, index); // input/1.txt
+    //sprintf(output_path, "output/%d.txt", index); // output/1.txt
+    sprintf(answer_path, "%s/%d.txt",answerdir, index); // answer/1.txt
+
     //input 읽기 전용으로
-    printf("input_path: %s\n",input_path);
     int input_fd = open(input_path, O_RDONLY);  
     if (input_fd < 0) {
         printf("No more test cases. Exiting...\n");
         return; // 함수 종료
     }
 
+    //output 쓰기 전용,파일이 없으면 생성가능,이미 있으면 덮어쓰기
+    // int output_fd = open(output_path, O_WRONLY | O_CREAT | O_TRUNC, 0666); 
+    // if (output_fd < 0) {
+    //     perror("Runtime - cannot open output file");
+    //     exit(1);
+    // }
+
     // answer 읽기 전용으로
-    printf("answer_path: %s\n",answer_path);
     int answer_fd = open(answer_path, O_RDONLY);  
     if (answer_fd < 0) {
-        perror("Runtime - cannot open answer file\n");
+        perror("Runtime - cannot open answer file");
         exit(1);
     }
 
@@ -111,26 +127,38 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
     if (pid == 0) {
         // 자식 프로세스에서 프로그램 실행
         alarm(timelimit); // 타이머 설정 define timelimit 1
-       
+        //struct itimerval timer; 
+        // //받은 밀리세컨드 단위의 timelimit 변환
+        // timer.it_value.tv_sec = timelimit / 1000; 
+        // timer.it_value.tv_usec = (timelimit % 1000) / 1000;
+        // timer.it_interval.tv_sec = 0; // 반복 없음
+        // timer.it_interval.tv_usec = 0; // 마이크로초는 0
+
+        // // 타이머 설정
+        // if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+        //     perror("setitimer");
+        //     exit(1);
+        // }
         close(pipefd[0]); //pipe읽기 닫기:쓰기만
 
-
         if (dup2(pipefd[1], STDOUT_FILENO) == -1) {  //stdout을 파이프로 리다이렉트: 이제 출력된게 파이프로 감
-            perror("dup2\n");
+            perror("dup2");
             exit(1);
         }
-
         close(pipefd[1]); // STDOUT으로 리다이렉트 했으므로 파이프의 쓰기 닫기
 
+
+        //printf("\ntesting %d.txt ....\n", index);
         dup2(input_fd, STDIN_FILENO);  
+        //dup2(output_fd, STDOUT_FILENO);
         close(input_fd);
-        
+        //close(output_fd);
     
         char *program_args[] = {compiled_program, NULL};
         execvp(compiled_program, program_args);
                  
-        //execvp가 실패했을 경우
-        perror("fail: execvp\n");
+        // execvp가 실패했을 경우
+        perror("fail: execvp");
 
         exit(1);
     } else if (pid > 0) {
@@ -155,12 +183,12 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
         // 시간 차이 계산
         elapsed_time = (end_time.tv_sec - start_time.tv_sec) * 1000000LL + (end_time.tv_usec - start_time.tv_usec);
 
-        printf("test case %s: ", input_path);
+        printf("test case %d: ", index);
         
         if (WIFSIGNALED(status)) {  //자식프로세스가 시그널에 의해서 종료되었을때 ex 무한루프
             if (WTERMSIG(status) == SIGALRM) {
                 // 시그널이 SIGALRM이면 timeout
-                printf("Timeout Error\n\n");
+                printf("Timeout Error\n");
                 timeout_num++;
                 } 
         }    
@@ -175,7 +203,7 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
                     
                     //못읽어와서 -1 반환받으면
                     if (output_size < 0) {
-                           perror("runtime error - cannot read pipe\n"); //에러
+                           perror("runtime error - cannot read pipe"); //에러
                         exit(1); //종료
                     }
                     close(pipefd[0]); // 파이프 읽기 종료
@@ -183,7 +211,7 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
                     char answer_buffer[4096];
                     int answer_fd = open(answer_path, O_RDONLY);
                     if (answer_fd < 0) {
-                        perror("runtime error - cannot open answer file\n");
+                        perror("runtime error - cannot open answer file");
                         exit(1);
                     }          
                     //printf("Buffer contents: %s\n", output_buffer);
@@ -193,7 +221,7 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
                     //printf("%ld %ld\n", output_size, answer_size);
 
                     if (output_size != answer_size || memcmp(output_buffer, answer_buffer, output_size) != 0) {
-                        printf("Fail - wrong answer\n\n");
+                        printf("Fail - wrong answer\n");
                         //카운트 해야됨
                         wrong_num ++;
                     } else {
@@ -207,7 +235,7 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
                     }
                 } else { //자식프로세스가 정상 종료되었지만 exit code가 0이 아닐때 ex) segmentation fault, buffer overflow.
                     //원래는 시그널에 의해 종료되고 exitcode가 0이 아니여야하지만, 이 운영체제에서는 정상종료되고 exitcode를 반환하지 않고 있다..ㅠㅠ
-                    printf("runtime error - exit code is not null %d\n\n", WTERMSIG(status));
+                    printf("runtime error - exit code is not null %d\n", WTERMSIG(status));
                     runtime_error_num++;
                 }
             }
@@ -218,18 +246,14 @@ void run_test_cases(char* input_path, char* answer_path, int timelimit, char *co
         //close(output_fd);
         close(answer_fd);
 
-        // // 다음 테스트 케이스 실행
-        // run_test_cases(inputdir, answerdir, timelimit, compiled_program, index + 1);
+        // 다음 테스트 케이스 실행
+        run_test_cases(inputdir, answerdir, timelimit, compiled_program, index + 1);
     }
     else {
         // fork 실패
         perror("fail: fork");
         exit(1);
     }
-}
-
-int compare(const void *a, const void *b) {
-    return strcmp(*(const char **)a, *(const char **)b);
 }
 
 
@@ -248,65 +272,10 @@ int main(int argc, char *argv[]) {
 
     compile_source(targetsrc);
 
-    printf("=========== Running test cases ============\n");
-
     // 여기에서 추가적인 채점 로직을 구현
-    DIR *dir;
-    struct dirent *ent;
-    char *input_files[1024]; // 파일명을 저장할 배열
-    char *answer_files[1024]; // 파일명을 저장할 배열
-    int input_count = 0;
-    int answer_count = 0;
-
-    //디렉토리 안의 모든 파일들을 처리
-    if ((dir = opendir(inputdir)) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            if (ent->d_type == DT_REG) { // 일반 파일인 경우만 처리
-                input_files[input_count] = strdup(ent->d_name);
-                input_count++;
-            }
-        }
-        closedir(dir);
-
-        qsort(input_files, input_count, sizeof(char *), compare);
-        // printf("Sorted files:\n");
-        // for (int i = 0; i < count; i++) {
-        //     printf("%s\n", input_files[i]);
-        // }
-    } else {
-        perror("Error opening directory");
-        return EXIT_FAILURE;
-    }
-    if ((dir = opendir(answerdir)) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            if (ent->d_type == DT_REG) { // 일반 파일인 경우만 처리
-                answer_files[answer_count] = strdup(ent->d_name);
-                answer_count++;
-            }
-        }
-        closedir(dir);
-        qsort(answer_files, answer_count, sizeof(char *), compare);
-    } else {
-        perror("Error opening directory");
-        return EXIT_FAILURE;
-    }
-
-    for (int i = 0; i < answer_count; i++) {
-            char input_path[1024];
-            char answer_path[1024];
-            //printf("%s",input_files[i]);
-            snprintf(input_path, sizeof(input_path), "%s/%s", inputdir, input_files[i]);
-            snprintf(answer_path, sizeof(answer_path), "%s/%s", answerdir,answer_files[i]);
-            //printf("%s", input_path);
-            run_test_cases(input_path,answer_path,timelimit,"./compiled_program");
-            free(input_files[i]);
-            free(answer_files[i]); // strdup으로 할당된 메모리 해제
-    }
-    
+    run_test_cases(inputdir, answerdir, timelimit, "./compiled_program", 1);
 
     // 결과 출력
-
-
     printf("\n\n ========== [RESULT] ========== \n");
 
     printf("Correct test case: %d cases\n", correct_num);
