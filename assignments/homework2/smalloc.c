@@ -32,17 +32,15 @@ void * smalloc(size_t s)
         // 생성된 메모리 포인터 설정
         smheader_ptr header = (smheader_ptr)ptr;
 
-        // next 노드의 주소값
-        void * nextpoint = ptr + structsize + blocksize;
         header->used = 1;
         header->size = s;
-        header->next = (smheader_ptr) nextpoint;
+        header->next = NULL;
 
         // smlist 에 header 정보 저장
         smlist = header;
 
 		size_t remaining_space = blocksize - structsize - s;
-        if (remaining_space > structsize) {
+        if (remaining_space >= structsize) {
             // 다음 블럭 초기화
             smheader_ptr next_block = (smheader_ptr)((void *)ptr + structsize + s);
             next_block->used = 0;
@@ -51,7 +49,7 @@ void * smalloc(size_t s)
 
             header->next = next_block;
         } 
-		return (void *)((void *)header + structsize);
+		return (void *)header + structsize;
     }
     
     // smlist가 null이 아닌 경우 (할당된 메모리에 활용 가능한 공간이 있는 경우)
@@ -65,9 +63,9 @@ void * smalloc(size_t s)
 			current->size = s;
 			current->used = 1;
 
-			// nextnode의 data region에 공간이 남는 경우 새로운 노드 추가
+			// 현재 node의 data region에 공간이 남는 경우 새로운 노드 추가
 			size_t remainingSpace = nodesize - structsize - s;
-			if (remainingSpace > structsize) {
+			if (remainingSpace >= structsize) {
 				// 다음 블럭 초기화
 				smheader_ptr nextblock = (smheader_ptr)((void *)current + structsize + s);
 				nextblock->used = 0;
@@ -75,10 +73,10 @@ void * smalloc(size_t s)
 				nextblock->next = nextnode;
 
 				current->next = nextblock;
-				return (void *)((void *)current + structsize);
+				return (void *)current + structsize;
 			}
 			current->next = nextnode;
-			return (void *)((void *)current + structsize);
+			return (void *)current + structsize;
 
         }
     }
@@ -102,8 +100,8 @@ void * smalloc(size_t s)
 	current->next = header;
 
 	size_t remainingSpace = blocksize - structsize - s;
-	// data region에 공간이 남는 경우 새로운 노드 추가
-	if (remainingSpace > structsize) {
+	// 현재 node의 data region에 공간이 남는 경우 새로운 노드 추가
+	if (remainingSpace >= structsize) {
 		// 다음 블럭 초기화
 		smheader_ptr next_block = (smheader_ptr)((void *)ptr + structsize + s);
 		next_block->used = 0;
@@ -113,13 +111,12 @@ void * smalloc(size_t s)
 		header->next = next_block;
 	}
 
-	return (void *)((void *)header + structsize);
+	return (void *)header + structsize;
 
 }
 
 void * smalloc_mode (size_t s, smmode m)
 {
-	size_t pagesize = getpagesize();
     size_t structsize = sizeof(smheader);
 
 	// 적합한 메모리 블록을 찾기 위한 변수 초기화
@@ -131,7 +128,7 @@ void * smalloc_mode (size_t s, smmode m)
     smheader_ptr current;
     for (current = smlist; current != NULL; current = current->next) 
     {
-		// unused면서 data의 size가 s + structsize (또는 pagesize) 보다 큰 경우
+		// unused면서 data의 size가 s + structsize 보다 큰 경우
         if ( !current->used && current->size >= (s + structsize)) {
             switch (m) {
                 case bestfit:
@@ -156,9 +153,9 @@ void * smalloc_mode (size_t s, smmode m)
 					header->size = s;
 					header->used = 1;
 
-					// nextnode의 data region에 공간이 남는 경우 새로운 노드 추가
+					// 현재 nodesize의 data region에 공간이 남는 경우 새로운 노드 추가
 					size_t remainingSpace = nodesize - structsize - s;
-					if (remainingSpace > structsize) {
+					if (remainingSpace >= structsize+s) {
 						// 다음 블럭 초기화
 						smheader_ptr nextblock = (smheader_ptr)((void *)header + structsize + s);
 						nextblock->used = 0;
@@ -166,11 +163,11 @@ void * smalloc_mode (size_t s, smmode m)
 						nextblock->next = nextnode;
 
 						header->next = nextblock;
-						return (void *)((void *)header + structsize);
+						return (void *)header + structsize;
 					}
 					
 					header->next = nextnode;
-					return (void *)((void *)header + structsize);
+					return (void *)header + structsize;
 
 					break;
             }
@@ -187,7 +184,7 @@ void * smalloc_mode (size_t s, smmode m)
 
 		// data region에 공간이 남는 경우 새로운 노드 추가
 		size_t remainingSpace = nodesize - structsize - s;
-		if (remainingSpace > structsize) {
+		if (remainingSpace >= structsize) {
 			// 다음 블럭 초기화
 			smheader_ptr nextblock = (smheader_ptr)((void *)header + structsize + s);
 			nextblock->used = 0;
@@ -195,11 +192,11 @@ void * smalloc_mode (size_t s, smmode m)
 			nextblock->next = nextnode;
 
 			header->next = nextblock;
-			return (void *)((void *)header + structsize);
+			return (void *)header + structsize;
 		}
 		
 		header->next = nextnode;
-		return (void *)((void *)header + structsize);
+		return (void *)header + structsize;
 
 	} else {
 		// 적합한 메모리 블록이 없는 경우 새로운 블록을 할당
@@ -230,6 +227,15 @@ void * srealloc (void * p, size_t s)
 	smheader_ptr next = NULL;
     smheader_ptr current = smlist;
 	size_t structsize = sizeof(smheader);
+	size_t pagesize = getpagesize();
+	size_t blocksize;
+	if ( (s + structsize) > pagesize) {
+        while (blocksize < s+structsize) {
+            blocksize += pagesize ;
+        }
+    } else {
+        blocksize = pagesize;
+    }
 
     // smlist를 순회하면서 p에 해당하는 메모리 블록을 찾음
     for (current = smlist; current != NULL; current = current->next)  {
@@ -242,10 +248,16 @@ void * srealloc (void * p, size_t s)
 				return p;
 			}
 
+			// 할당된 size가 동일하면 그대로 return
+			if ( current->size == s)
+			{
+				return current;
+			}
+			
 			// 기존 메모리 크기보다 큰 size로 realloc 하려는 경우 현재 메모리 free 하고 smalloc_mode로 할당
 			else if (current->size < s) {
+				current->used = 0;
 				void * ptr = smalloc_mode(s, bestfit);
-				sfree(p);
 				return ptr;
 			}
 
@@ -257,8 +269,7 @@ void * srealloc (void * p, size_t s)
 
 				// data region에 공간이 남는 경우 새로운 노드 추가
 				size_t remainingSpace = nodesize - structsize - s;
-				printf("remaining size: %ld",remainingSpace);
-				if (remainingSpace > structsize) {
+				if (remainingSpace >= structsize) {
 					// 다음 블럭 초기화
 					smheader_ptr nextblock = (smheader_ptr)((void *)current + structsize + s);
 					nextblock->used = 0;
@@ -276,27 +287,23 @@ void * srealloc (void * p, size_t s)
 	abort();
 }
 
-void smcoalesce ()
-{
-	smheader_ptr nextnode = NULL;
-	smheader_ptr nnextnode = NULL;
+void smcoalesce() {
     smheader_ptr current = smlist;
-	size_t structsize = sizeof(smheader);
+    size_t structsize = sizeof(smheader);
 
-	// smlist를 순회하면서 비어있는 메모리 블록을 찾음
-    for (current = smlist; current->next != NULL; current = current->next)  {
-		
-		// current가 unused이면서 current->next도 unuesd 라면
-		if ( current->next != NULL )
-			nextnode = current->next;
-		if( !current->used && !nextnode->used ) {
-			nnextnode = nextnode->next; // node 연결을 위한 nextnode->next 의 주소값 저장
-			current->size = current->size + nextnode->size + structsize;
-			current->next = nnextnode;
-			munmap((void *)nextnode, structsize + nextnode->size);
-		}
-	}
+    // smlist를 순회하면서 비어있는 메모리 블록을 찾음
+    while (current != NULL && current->next != NULL) {
+        smheader_ptr nextnode = current->next; // 다음 노드를 가리키는 포인터
+        if (!current->used && !nextnode->used) {
+            smheader_ptr nnextnode = nextnode->next; // 다다음 노드를 가리키는 포인터
+            current->size += nextnode->size + structsize; // 크기 조정
+            current->next = nnextnode; // 현재 노드의 다음 노드를 다다음 노드로 설정
+        } else {
+            current = current->next; // 다음 노드로 이동
+        }
+    }
 }
+
 
 void smdump () 
 {
