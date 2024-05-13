@@ -291,17 +291,34 @@ void smcoalesce() {
     smheader_ptr current = smlist;
     size_t structsize = sizeof(smheader);
 
-    // smlist를 순회하면서 비어있는 메모리 블록을 찾음
-    while (current != NULL && current->next != NULL) {
-        smheader_ptr nextnode = current->next; // 다음 노드를 가리키는 포인터
-        if (!current->used && !nextnode->used) {
-            smheader_ptr nnextnode = nextnode->next; // 다다음 노드를 가리키는 포인터
-            current->size += nextnode->size + structsize; // 크기 조정
-            current->next = nnextnode; // 현재 노드의 다음 노드를 다다음 노드로 설정
-        } else {
-            current = current->next; // 다음 노드로 이동
-        }
-    }
+	if(current == NULL){
+		return;
+	}
+	while (current != NULL){
+		smheader_ptr next = current->next;
+		if(next != NULL && !current->used && !next->used ){
+			int totalSize = 0;
+			totalSize = current->size + next->size;
+			//합친 사이즈가 페이지 크기를 넘어갈때
+			if(totalSize > getpagesize()){
+				printf("합친크기가 페이지크기보다 큽니다. 분할합니다.\n");
+				current->size = getpagesize() - structsize;
+				next->size = totalSize - getpagesize();
+				current = current->next;
+			}
+			//합친 사이즈가 페이지 크기보다 작으면
+			else{
+				//합치고
+				current->size += next->size;
+				//포인터 업데이트
+				current->next = next->next;
+				//current는 유지(연결한 다음 노드도 unused일수 있음) 
+				continue;
+			}
+			
+		}
+		current = current->next;
+	}
 }
 
 
