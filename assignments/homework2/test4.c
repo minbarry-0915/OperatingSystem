@@ -40,16 +40,25 @@ int main ()
 	printf("smcoalesce()\n") ;
 	smdump();
 
-	srealloc(p1, 4000) ;
+	p1 = srealloc(p1, 4000) ;
 	printf("srealloc(p1, 4000):%p\n", p1) ;
 	smdump() ;
 
-	srealloc(p2, 2500) ;
+	p2 = srealloc(p2, 2500) ;
 	printf("srealloc(p2, 2500):%p\n", p2) ;
 	smdump() ;
 
 	p6 = smalloc_mode(500, bestfit) ;
-	printf("smalloc_mode(p6, bestfit):%p\n", p6) ;
+	printf("smalloc_mode(500, bestfit):%p\n", p6) ;
 	smdump() ;
-	
+
+	sfree(p1);
+	sfree(p2);
+	sfree(p5);
+	sfree(p6);
+	smdump() ;
+
+	smcoalesce();
+	printf("smcoalesce()\n") ;
+	smdump();
 }

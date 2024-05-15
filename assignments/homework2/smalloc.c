@@ -53,10 +53,11 @@ void * smalloc(size_t s)
     }
     
     // smlist가 null이 아닌 경우 (할당된 메모리에 활용 가능한 공간이 있는 경우)
-    smheader_ptr current;
-    for (current = smlist; current != NULL; current = current->next) 
-    {
-        if (current->size > s + structsize && current->used == 0) {
+	smheader_ptr current;
+	smheader_ptr prev = NULL;
+	for (current = smlist; current != NULL; prev = current, current = current->next) 
+	{
+		if (current->size > s + structsize && current->used == 0) {
 			smheader_ptr nextnode = current->next;
 			size_t nodesize = current->size;
 			current->next = NULL;
@@ -73,13 +74,16 @@ void * smalloc(size_t s)
 				nextblock->next = nextnode;
 
 				current->next = nextblock;
-				return (void *)current + structsize;
 			}
-			current->next = nextnode;
+			// 이전 노드가 있다면 새로운 블록과 이어줍니다.
+			if (prev != NULL) {
+				prev->next = current;
+			}
 			return (void *)current + structsize;
 
-        }
-    }
+		}
+	}
+
 
 	// smlist가 null이 아닌 경우 (할당된 메모리에 활용 가능한 공간이 없는 경우)
 	// blocksize 만큼 메모리 공간 할당
@@ -99,86 +103,67 @@ void * smalloc(size_t s)
 	for (current = smlist; current->next != NULL; current = current->next);
 	current->next = header;
 
+
 	size_t remainingSpace = blocksize - structsize - s;
 	// 현재 node의 data region에 공간이 남는 경우 새로운 노드 추가
 	if (remainingSpace >= structsize) {
 		// 다음 블럭 초기화
-		smheader_ptr next_block = (smheader_ptr)((void *)ptr + structsize + s);
-		next_block->used = 0;
-		next_block->size = remainingSpace - structsize;
-		next_block->next = NULL;
+		smheader_ptr nextblock = (smheader_ptr)((void *)ptr + structsize + s);
+		nextblock->used = 0;
+		nextblock->size = remainingSpace - structsize;
+		nextblock->next = NULL;
 
-		header->next = next_block;
+		header->next = nextblock;
+
 	}
 
 	return (void *)header + structsize;
 
 }
 
-void * smalloc_mode (size_t s, smmode m)
-{
+void *smalloc_mode(size_t s, smmode m) {
     size_t structsize = sizeof(smheader);
 
-	// 적합한 메모리 블록을 찾기 위한 변수 초기화
+    // 적합한 메모리 블록을 찾기 위한 변수 초기화
     smheader_ptr header = NULL;
     size_t minsize = SIZE_MAX;
     size_t maxsize = 0;
 
-	// 할당 모드에 따라 메모리 블록 선택
+    // 할당 모드에 따라 메모리 블록 선택
     smheader_ptr current;
-    for (current = smlist; current != NULL; current = current->next) 
-    {
-		// unused면서 data의 size가 s + structsize 보다 큰 경우
-        if ( !current->used && current->size >= (s + structsize)) {
+    for (current = smlist; current != NULL; current = current->next) {
+        // unused면서 data의 size가 s + structsize 보다 큰 경우
+        if (!current->used && current->size >= (s + structsize)) {
             switch (m) {
                 case bestfit:
                     // bestfit 모드에서는 가장 작은 빈 메모리 블록 선택
                     if (current->size < minsize) {
                         minsize = current->size;
-						header = current;
+                        header = current;
                     }
                     break;
                 case worstfit:
                     // worstfit 모드에서는 가장 큰 빈 메모리 블록 선택
                     if (current->size > maxsize) {
-						maxsize = current->size;
-						header = current;
+                        maxsize = current->size;
+                        header = current;
                     }
                     break;
                 case firstfit:
-					header = current;
-					smheader_ptr nextnode = header->next;
-					size_t nodesize = header->size;
-					header->next = NULL;
-					header->size = s;
-					header->used = 1;
-
-					// 현재 nodesize의 data region에 공간이 남는 경우 새로운 노드 추가
-					size_t remainingSpace = nodesize - structsize - s;
-					if (remainingSpace >= structsize+s) {
-						// 다음 블럭 초기화
-						smheader_ptr nextblock = (smheader_ptr)((void *)header + structsize + s);
-						nextblock->used = 0;
-						nextblock->size = remainingSpace;
-						nextblock->next = nextnode;
-
-						header->next = nextblock;
-						return (void *)header + structsize;
-					}
-					
-					header->next = nextnode;
-					return (void *)header + structsize;
-
-					break;
+                    header = current;
+                    break;
+            }
+            if (header != NULL) {
+                break; // 적절한 블록을 찾았으면 반복문 종료
             }
         }
     }
 
-	// mode 유형에 해당하는 메모리 블럭을 찾은 경우
-	if (header != NULL) {
+    // mode 유형에 해당하는 메모리 블럭을 찾은 경우
+    if (header != NULL) {
+        // header 블록을 사용하여 새로운 메모리를 할당하는 예시
 		smheader_ptr nextnode = header->next;
 		size_t nodesize = header->size;
-		header->next = NULL;
 		header->size = s;
 		header->used = 1;
 
@@ -192,18 +177,17 @@ void * smalloc_mode (size_t s, smmode m)
 			nextblock->next = nextnode;
 
 			header->next = nextblock;
-			return (void *)header + structsize;
 		}
-		
-		header->next = nextnode;
+
+		// 이전에 할당된 메모리를 사용하는 경우 처리
 		return (void *)header + structsize;
 
-	} else {
-		// 적합한 메모리 블록이 없는 경우 새로운 블록을 할당
-		smalloc(s);
-	}
-	
+    } else {
+        // 적합한 메모리 블록이 없는 경우 새로운 블록을 할당
+        return smalloc(s);
+    }
 }
+
 
 void sfree (void * p) 
 {
@@ -251,7 +235,7 @@ void * srealloc (void * p, size_t s)
 			// 할당된 size가 동일하면 그대로 return
 			if ( current->size == s)
 			{
-				return current;
+				return (void *) current+24;
 			}
 			
 			// 기존 메모리 크기보다 큰 size로 realloc 하려는 경우 현재 메모리 free 하고 smalloc_mode로 할당
@@ -266,7 +250,7 @@ void * srealloc (void * p, size_t s)
 				size_t nodesize = current->size;
 				current->size = s;	// 입력받은 size로 업데이트
 				current->used = 1;
-
+				
 				// data region에 공간이 남는 경우 새로운 노드 추가
 				size_t remainingSpace = nodesize - structsize - s;
 				if (remainingSpace >= structsize) {
@@ -290,35 +274,40 @@ void * srealloc (void * p, size_t s)
 void smcoalesce() {
     smheader_ptr current = smlist;
     size_t structsize = sizeof(smheader);
+    size_t pagesize = getpagesize();
 
-	if(current == NULL){
-		return;
-	}
-	while (current != NULL){
-		smheader_ptr next = current->next;
-		if(next != NULL && !current->used && !next->used ){
-			int totalSize = 0;
-			totalSize = current->size + next->size;
-			//합친 사이즈가 페이지 크기를 넘어갈때
-			if(totalSize > getpagesize()){
-				printf("합친크기가 페이지크기보다 큽니다. 분할합니다.\n");
-				current->size = getpagesize() - structsize;
-				next->size = totalSize - getpagesize();
-				current = current->next;
-			}
-			//합친 사이즈가 페이지 크기보다 작으면
-			else{
-				//합치고
-				current->size += next->size;
-				//포인터 업데이트
-				current->next = next->next;
-				//current는 유지(연결한 다음 노드도 unused일수 있음) 
-				continue;
-			}
-			
-		}
-		current = current->next;
-	}
+    while (current != NULL && current->next != NULL) {
+        size_t totalsize = 0;
+        smheader_ptr nextblock = current->next;
+
+        // 현재 블록과 다음 블록이 병합 가능한지 확인
+        if (!nextblock->used && !current->used) {
+            // 두 블록의 메모리 주소가 연속적인지 확인
+            if ((void *)current + structsize + current->size == (void *)nextblock) {
+                // 현재 블록과 다음 블록을 병합하여 총 크기 계산
+                totalsize = current->size + structsize + nextblock->size + structsize;
+
+                if (totalsize <= pagesize) {
+                    smheader_ptr nnext = nextblock->next;
+                    printf("%p\n", nnext);
+                    // 병합된 블록 해제
+                    munmap(nextblock, nextblock->size + structsize);
+                    
+                    mmap(nextblock, nextblock->size + structsize,  PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+
+                     // 현재 블록 크기 업데이트
+                    current->size = totalsize - structsize;
+
+                    // 병합된 블록의 다음 포인터 업데이트
+                    current->next = nnext;
+                    
+                    continue; // 다음 블록으로 건너뜁니다.
+                }
+            }
+        }
+
+        current = nextblock; // 다음 블록으로 이동
+    }
 }
 
 
