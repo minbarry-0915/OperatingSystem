@@ -185,4 +185,3 @@ void merge_sort (double * a, int n_a)
 
 	merge_lists(a1, n_a1, a2, n_a2) ;
 }
-
