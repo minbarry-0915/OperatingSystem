@@ -3,6 +3,7 @@
 #include <string.h>
 #include "stack.h"
 
+// gcc -DBOARD_SIZE=15 stack.c nqueens.c
 #ifndef BOARD_SIZE
 #define BOARD_SIZE	15
 #endif 
@@ -20,14 +21,14 @@ int col (int cell)
 
 int is_feasible (struct stack_t * queens) 
 {
-	int board[BOARD_SIZE][15] ;
-	int c, r ;
+		int board[BOARD_SIZE][15] ;
+		int c, r ;
 
-	for (r = 0 ; r < BOARD_SIZE ; r++) {
-		for (c = 0 ; c < BOARD_SIZE ; c++) {
-			board[r][c] = 0 ;
+		for (r = 0 ; r < BOARD_SIZE ; r++) {
+			for (c = 0 ; c < BOARD_SIZE ; c++) {
+				board[r][c] = 0 ;
+			}
 		}
-	}
 
 	for (int i = 0 ; i < get_size(queens) ; i++) {
 		int cell ;
@@ -86,7 +87,7 @@ void print_placement (struct stack_t * queens)
 	}
 }
 
-
+//퀸이 진행했던 과거 경로를 받고 나머지 길을 찾음
 int find_n_queens_with_prepositions (int N, struct stack_t * prep)
 {
 	struct stack_t * queens = create_stack(BOARD_SIZE) ;
@@ -112,6 +113,7 @@ int find_n_queens_with_prepositions (int N, struct stack_t * prep)
 		}
 
 		if (is_feasible(queens)) {
+			//길을 을 하나 찾았을때
 			if (get_size(queens) == N) {
 			
 				print_placement(queens) ;
@@ -185,9 +187,17 @@ int find_n_queens (int N)
 	}
 	delete_stack(queens) ;
 }
+//스레드 갯수 8개정도 64보다는 작게 해야됨
+//bounded buffer서야됨
+//길찾으면 화면에 뿌려야됨
+//동시에 프린팅 겹치지 않게 처리해야됨
+//컨 c누르면 지금까지 찾은 경로 총갯수 출력해야되고 종료하면됨
+//bounded buffer어떻게 썻는지 영상에 포함되어야함
+//make file이랑 readme 만들어야됨
+//실패해도 어디까지 했는지 말해달라ㅏㅏㅏㅏㅏ
 
 int main ()
 {
-	find_n_queens(4) ;
+	find_n_queens(BOARD_SIZE) ;
 	return EXIT_FAILURE ;
 }
