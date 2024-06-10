@@ -5,7 +5,7 @@
 
 // gcc -DBOARD_SIZE=15 stack.c nqueens.c
 #ifndef BOARD_SIZE
-#define BOARD_SIZE	15
+#define BOARD_SIZE 15	
 #endif 
 
 
@@ -21,8 +21,8 @@ int col (int cell)
 
 int is_feasible (struct stack_t * queens) 
 {
-		int board[BOARD_SIZE][15] ;
-		int c, r ;
+	int board[BOARD_SIZE][BOARD_SIZE] ;
+	int c, r ;
 
 		for (r = 0 ; r < BOARD_SIZE ; r++) {
 			for (c = 0 ; c < BOARD_SIZE ; c++) {
@@ -50,25 +50,25 @@ int is_feasible (struct stack_t * queens)
 		}
 
 		y = r + 1 ; x = c + 1 ;
-		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < 15) {
+		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < BOARD_SIZE) {
 			board[y][x] = 1 ;
 			y += 1 ; x += 1 ;
 		}
 
 		y = r + 1 ; x = c - 1 ;
-		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < 15) {
+		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < BOARD_SIZE) {
 			board[y][x] = 1 ;
 			y += 1 ; x -= 1 ;
 		}
 
 		y = r - 1 ; x = c + 1 ;
-		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < 15) {
+		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < BOARD_SIZE) {
 			board[y][x] = 1 ;
 			y -= 1 ; x += 1 ;
 		}
 
 		y = r - 1 ; x = c - 1 ;
-		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < 15) {
+		while (0 <= y && y < BOARD_SIZE && 0 <= x && x < BOARD_SIZE) {
 			board[y][x] = 1 ;
 			y -= 1 ; x -= 1 ;
 		}
@@ -96,11 +96,11 @@ int find_n_queens_with_prepositions (int N, struct stack_t * prep)
 	queens->size = prep->size ;
 	memcpy(queens->buffer, prep->buffer, prep->size * sizeof(int)) ;
 
-	while (!is_empty(queens)) {
+	while (prep->size <= queens->size) {
 		int latest_queen ;
 		top(queens, &latest_queen) ;
 
-		if (latest_queen == BOARD_SIZE * 15) {
+		if (latest_queen == BOARD_SIZE * BOARD_SIZE) {
 			pop(queens, &latest_queen) ;
 			if (!is_empty(queens)) {
 				pop(queens, &latest_queen) ;
@@ -140,7 +140,6 @@ int find_n_queens_with_prepositions (int N, struct stack_t * prep)
 	delete_stack(queens) ;
 }
 
-
 int find_n_queens (int N)
 {
 	struct stack_t * queens = create_stack(BOARD_SIZE) ;
@@ -150,7 +149,7 @@ int find_n_queens (int N)
 		int latest_queen ;
 		top(queens, &latest_queen) ;
 
-		if (latest_queen == BOARD_SIZE * 15) {
+		if (latest_queen == BOARD_SIZE * BOARD_SIZE) {
 			pop(queens, &latest_queen) ;
 			if (!is_empty(queens)) {
 				pop(queens, &latest_queen) ;
