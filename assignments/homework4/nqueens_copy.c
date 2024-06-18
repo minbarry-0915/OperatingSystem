@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <getopt.h>
 #include "stack.h"
 
 // gcc -DBOARD_SIZE=15 stack.c nqueens.c -pthread
