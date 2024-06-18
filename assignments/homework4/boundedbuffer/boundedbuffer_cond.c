@@ -35,14 +35,14 @@ bounded_buffer_queue (bounded_buffer * buf, char * msg)
 	pthread_mutex_lock(&(buf->lock)) ;
 		
 	while (!(buf->num < buf->capacity)) {
-		pthread_cond_wait(&(buf->queue_cv), &(buf->lock)) ;
+		pthread_cond_wait(&(buf->queue_cv), &(buf->lock)) ;  //mutex unlock lock을 wait으로 바꿈
 	}
 
 	buf->elem[buf->rear] = msg ;
 	buf->rear = (buf->rear + 1) % buf->capacity ;
 	buf->num += 1 ;	
 
-	pthread_cond_signal(&(buf->dequeue_cv)) ;
+	pthread_cond_signal(&(buf->dequeue_cv)) ;  //작업이 생성되었으므로 dequeue_cv를 깨워서 consumer 작업을 진행함
 
 	pthread_mutex_unlock(&(buf->lock)) ;
 }

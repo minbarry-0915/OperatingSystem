@@ -21,7 +21,7 @@ void
 bounded_buffer_init(bounded_buffer * buf, int capacity) {
 	sem_init(&(buf->filled), 0, 0) ;
 	sem_init(&(buf->empty), 0, capacity) ;
-	pthread_mutex_init(&(buf->lock), 0x0) ;
+	pthread_mutex_init(&(buf->lock), 0x0) ;  //뮤텍스 동적 초기화
 	buf->capacity = capacity ;
 	buf->elem = (char **) calloc(sizeof(char *), capacity) ;
 	buf->num = 0 ;

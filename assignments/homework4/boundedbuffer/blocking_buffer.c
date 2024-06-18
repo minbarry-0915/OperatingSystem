@@ -28,15 +28,15 @@ void
 bounded_buffer_queue (bounded_buffer * buf, char * msg) 
 {
 	pthread_mutex_lock(&(buf->lock)) ;
-	while (!(buf->num < buf->capacity)) {
+	while (!(buf->num < buf->capacity)) { //버퍼의 개수가 버퍼의 크기보다 작지 않다면: 버퍼가 꽉찬다면
 		pthread_mutex_unlock(&(buf->lock)) ;
 
 		pthread_mutex_lock(&(buf->lock)) ;
 	}
-
+	//버퍼의 원소 갯수가 버퍼의 용량보다 작다면: 원소를 삽입할 수 있는 조건이 되므로 탈출
 	buf->elem[buf->rear] = msg ;
-	buf->rear = (buf->rear + 1) % buf->capacity ;
-	buf->num += 1 ;
+	buf->rear = (buf->rear + 1) % buf->capacity ; //원형 큐라서 버퍼의 용량을 넘어갔을때의 조건 추가
+	buf->num += 1 ; 
 	
 	pthread_mutex_unlock(&(buf->lock)) ;
 }
@@ -46,12 +46,12 @@ bounded_buffer_dequeue (bounded_buffer * buf)
 {
 	char * r = 0x0 ;
 	pthread_mutex_lock(&(buf->lock)) ;
-	while (!(buf->num > 0)) {
+	while (!(buf->num > 0)) {  //버퍼에 원소가 없으면
 		pthread_mutex_unlock(&(buf->lock)) ;
 
 		pthread_mutex_lock(&(buf->lock)) ;
 	}
-
+	//버퍼에 원소가 있으면
 	r = buf->elem[buf->front] ;
 	buf->front = (buf->front + 1) % buf->capacity ;
 	buf->num -= 1 ;
@@ -68,9 +68,9 @@ producer (void * ptr)
 	pthread_t tid ;
 	int i ;
 	
-	tid = pthread_self() ;
+	tid = pthread_self() ; //tid에 스레드의 id를 넣음
 	for (i = 0 ; i < 10 ; i++) {
-		snprintf(msg, 128, "(%ld,%d)", (unsigned long) tid, i) ;
+		snprintf(msg, 128, "(%ld,%d)", (unsigned long) tid, i) ; //(버퍼포인터, 버퍼크기, 서식 문자열, 넣을 변수들)
 		bounded_buffer_queue(buf, strdup(msg)) ;
 	}
 	return 0x0 ;

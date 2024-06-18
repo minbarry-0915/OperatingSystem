@@ -41,7 +41,7 @@ bounded_buffer_dequeue (bounded_buffer * buf)
 {
 	char * r = 0x0 ;
 	pthread_mutex_lock(&(buf->lock)) ;
-	if (buf->num > 0) {
+	if (buf->num > 0) {  // critical section에 대한 관리가 이루어지지 않아서  
 		r = buf->elem[buf->front] ;
 		buf->front = (buf->front + 1) % buf->capacity ;
 		buf->num -= 1 ;
